@@ -55,3 +55,10 @@ A web dashboard is used to visualize data and provide AI-based predictions.
 ### 3. Open dashboard
 Open in browser:
 
+
+## 📸 Screenshots
+### 🌐 Dashboard
+![Dashboard](assets/dashboard.png)
+
+### 🖥 LCD Display
+![LCD](assets/device-setup.png)
