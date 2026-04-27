@@ -1,0 +1,6 @@
+paho-mqtt
+firebase-admin
+pandas
+numpy
+scikit-learn
+matplotlib
