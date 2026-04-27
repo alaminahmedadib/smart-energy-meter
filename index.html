@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Smart Energy Dashboard + AI</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
+
+  <style>
+    body {
+      font-family: Arial;
+      background: #0f172a;
+      color: white;
+      text-align: center;
+    }
+
+    .container {
+      display: flex;
+      justify-content: space-around;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+
+    .card {
+      background: #1e293b;
+      padding: 15px;
+      border-radius: 10px;
+      width: 200px;
+      margin: 10px;
+    }
+
+    canvas {
+      margin-top: 30px;
+      background: white;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+
+<body>
+
+<h1>⚡ Smart Energy Dashboard + AI Prediction</h1>
+
+<div class="container">
+
+  <div class="card"><h3>Today kWh</h3><p id="today">0</p></div>
+  <div class="card"><h3>This Week kWh</h3><p id="week">0</p></div>
+  <div class="card"><h3>Total Bill</h3><p id="bill">0 Tk</p></div>
+  <div class="card"><h3>🔮 AI Prediction</h3><p id="prediction">0 kWh</p></div>
+
+  <div class="card"><h3>⚠️ Peak Consumption</h3><p id="peak">0 kWh</p><small id="peakDate"></small></div>
+
+  <div class="card"><h3>📊 Weekly Prediction</h3><p id="weeklyPred">0 kWh</p></div>
+
+  <div class="card"><h3>🔥 Usage Class</h3><p id="usageClass">-</p></div>
+
+  <div class="card"><h3>🌱 Energy Insight</h3><p id="insight">Analyzing...</p></div>
+
+</div>
+
+<canvas id="dailyChart"></canvas>
+<canvas id="weeklyChart"></canvas>
+
+<script>
+
+  // ================= FIREBASE =================
+  const firebaseConfig = {
+    databaseURL: "https://energy-iot-f3c75-default-rtdb.asia-southeast1.firebasedatabase.app/"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+  const ref = db.ref("energy_data");
+
+  let dailyChart, weeklyChart;
+
+  // ================= AI (NEXT DAY) =================
+  function predictNext(values) {
+    if (values.length < 2) return 0;
+
+    let x = [], y = [];
+
+    values.forEach((val, i) => {
+      x.push(i);
+      y.push(val);
+    });
+
+    let n = x.length;
+    let sumX = x.reduce((a,b)=>a+b,0);
+    let sumY = y.reduce((a,b)=>a+b,0);
+    let sumXY = x.reduce((a,b,i)=>a + b*y[i],0);
+    let sumX2 = x.reduce((a,b)=>a + b*b,0);
+
+    let slope = (n*sumXY - sumX*sumY) / (n*sumX2 - sumX*sumX);
+    let intercept = (sumY - slope*sumX) / n;
+
+    return slope * n + intercept;
+  }
+
+  // ================= WEEKLY PREDICTION =================
+  function predictWeekly(values) {
+    if (values.length < 2) return 0;
+
+    let avg = values.reduce((a,b)=>a+b,0) / values.length;
+    return avg * 7;
+  }
+
+  // ================= PEAK DETECTION =================
+  function detectPeak(daily) {
+    let peakValue = 0;
+    let peakDate = "";
+
+    for (let d in daily) {
+      if (daily[d] > peakValue) {
+        peakValue = daily[d];
+        peakDate = d;
+      }
+    }
+
+    return { peakValue, peakDate };
+  }
+
+  // ================= USAGE CLASS =================
+  function classifyUsage(val) {
+    if (val < 2) return "🟢 Low";
+    if (val < 5) return "🟡 Medium";
+    return "🔴 High";
+  }
+
+  // ================= INSIGHT =================
+  function generateInsight(today, peak) {
+    if (today > peak * 0.8) return "⚠ High usage today!";
+    if (today < peak * 0.3) return "✅ Great energy saving!";
+    return "ℹ Normal usage";
+  }
+
+  // ================= GROUP DATA =================
+  function groupData(data) {
+
+    let daily = {};
+    let weekly = {};
+    let totalBill = 0;
+
+    for (let key in data) {
+      let item = data[key];
+
+      let date = item.time.split(" ")[0];
+      let week = getWeekNumber(new Date(date));
+
+      totalBill += item.bill;
+
+      if (!daily[date]) daily[date] = 0;
+      daily[date] += item.kwh;
+
+      if (!weekly[week]) weekly[week] = 0;
+      weekly[week] += item.kwh;
+    }
+
+    return { daily, weekly, totalBill };
+  }
+
+  function getWeekNumber(d) {
+    let firstDay = new Date(d.getFullYear(), 0, 1);
+    let pastDays = (d - firstDay) / 86400000;
+    return Math.ceil((pastDays + firstDay.getDay() + 1) / 7);
+  }
+
+  // ================= CHARTS =================
+  function updateCharts(daily, weekly) {
+
+    if (dailyChart) dailyChart.destroy();
+    if (weeklyChart) weeklyChart.destroy();
+
+    dailyChart = new Chart(document.getElementById("dailyChart"), {
+      type: "line",
+      data: {
+        labels: Object.keys(daily),
+        datasets: [{
+          label: "Daily kWh",
+          data: Object.values(daily),
+          borderColor: "blue"
+        }]
+      }
+    });
+
+    weeklyChart = new Chart(document.getElementById("weeklyChart"), {
+      type: "bar",
+      data: {
+        labels: Object.keys(weekly),
+        datasets: [{
+          label: "Weekly kWh",
+          data: Object.values(weekly),
+          backgroundColor: "green"
+        }]
+      }
+    });
+  }
+
+  // ================= REAL TIME =================
+  ref.on("value", (snapshot) => {
+
+    let data = snapshot.val();
+    if (!data) return;
+
+    let result = groupData(data);
+
+    let lastDate = Object.keys(result.daily).pop();
+
+    // TODAY
+    let today = result.daily[lastDate];
+    document.getElementById("today").innerText = today.toFixed(2) + " kWh";
+
+    // WEEK
+    let weekKeys = Object.keys(result.weekly);
+    let lastWeek = weekKeys[weekKeys.length - 1];
+    document.getElementById("week").innerText =
+      result.weekly[lastWeek].toFixed(2) + " kWh";
+
+    // BILL
+    document.getElementById("bill").innerText =
+      result.totalBill.toFixed(2) + " Tk";
+
+    // AI NEXT DAY
+    let values = Object.values(result.daily);
+    let prediction = predictNext(values);
+    document.getElementById("prediction").innerText =
+      prediction.toFixed(2) + " kWh";
+
+    // WEEKLY PREDICTION
+    document.getElementById("weeklyPred").innerText =
+      predictWeekly(values).toFixed(2) + " kWh";
+
+    // PEAK
+    let peak = detectPeak(result.daily);
+
+    document.getElementById("peak").innerText =
+      peak.peakValue.toFixed(2) + " kWh";
+
+    document.getElementById("peakDate").innerText =
+      "Date: " + peak.peakDate;
+
+    // CLASSIFICATION
+    document.getElementById("usageClass").innerText =
+      classifyUsage(today);
+
+    // INSIGHT
+    document.getElementById("insight").innerText =
+      generateInsight(today, peak.peakValue);
+
+    // CHARTS
+    updateCharts(result.daily, result.weekly);
+  });
+
+</script>
+
+</body>
+</html>
