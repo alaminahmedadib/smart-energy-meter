@@ -61,4 +61,4 @@ Open in browser:
 ![Dashboard](assets/dashboard.png)
 
 ### 🖥 LCD Display
-![LCD](assets/device-setup.png)
+![LCD](assets/device setup.png)
